@@ -78,7 +78,7 @@ POST /generate
 If you use this work in your research or project, please cite:
 ```
 @project{LLMAccelGo2025,
-  author = {Ketan Sarda and Tanmay Jhawar},
+  author = {Ketan Sarda},
   title  = {LLM AccelGo: Fine-Tuning and Accelerating Large Language Models in Go},
   year   = {2025},
   note   = {DigitalOcean GPU + CUDA + TensorRT implementation}
