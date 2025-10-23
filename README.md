@@ -86,7 +86,7 @@ If you use this work in your research or project, please cite:
 ```
 
 ## 👨‍💻 Author
-**Ketan Sarda / Tanmay Jhawar**
+**Ketan Sarda**
 - 🎓 M.S. Computer Science, UC Irvine
 - 💼 AI Architecture Intern, Lenovo | SQL DBA, Regis Aged Care
 - 🌐 [linkedin.com/in/ketan-sarda](https://linkedin.com/in/ketan-sarda)
