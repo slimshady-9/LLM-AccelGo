@@ -18,6 +18,16 @@ int sd_verify(const int *d_proposed, int draft_n, int i0, int vocab, int workloa
 // Baseline single-step: compute 1 token (simulated), returns token (unused).
 int sd_baseline_step(int i, int vocab, int workload_iters);
 
+// Timed versions: return milliseconds in *ms_out
+void sd_draft_timed(int draft_n, int i0, int vocab, int work_flops, int mem_iters, int mem_len,
+					unsigned int seed, int noise_ppm, float* ms_out);
+
+int  sd_verify_timed(int draft_n, int i0, int vocab, int work_flops, int mem_iters, int mem_len,
+					 float* ms_out);
+
+int  sd_baseline_step_timed(int i, int vocab, int work_flops, int mem_iters, int mem_len,
+							float* ms_out);
+
 #ifdef __cplusplus
 }
 #endif
