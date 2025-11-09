@@ -1,5 +1,6 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
+#include <stdio.h>
 
 extern "C" {
 
@@ -29,6 +30,13 @@ static void ensure_mem_buffer(int len){
 
 static float elapsed_ms(cudaEvent_t a, cudaEvent_t b){
     float ms = 0.f; cudaEventElapsedTime(&ms, a, b); return ms;
+}
+
+static void log_cuda_if_error(const char* label) {
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "%s: %s\n", label, cudaGetErrorString(err));
+    }
 }
 
 __device__ __forceinline__ int true_token(int i, int vocab) {
@@ -128,6 +136,7 @@ void sd_draft(int *d_proposed, int draft_n, int i0, int vocab, int workload_iter
     int blocks = (draft_n + threads - 1) / threads;
     ensure_proposed_capacity(draft_n);
     draft_kernel<<<blocks, threads>>>(g_proposed, draft_n, i0, vocab, workload_iters, 0, nullptr, 0, seed, noise_ppm);
+    log_cuda_if_error("draft_kernel");
     cudaDeviceSynchronize();
 }
 
@@ -136,6 +145,7 @@ int sd_verify(const int *d_proposed, int draft_n, int i0, int vocab, int workloa
     cudaMalloc(&d_acc, sizeof(int));
     ensure_proposed_capacity(draft_n);
     verify_kernel<<<1, 32>>>(g_proposed, d_acc, draft_n, i0, vocab, workload_iters, 0, nullptr, 0);
+    log_cuda_if_error("verify_kernel");
     cudaMemcpy(&h_acc, d_acc, sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(d_acc);
     cudaDeviceSynchronize();
@@ -146,6 +156,7 @@ int sd_baseline_step(int i, int vocab, int workload_iters) {
     int *d_tok = nullptr; int h_tok = 0;
     cudaMalloc(&d_tok, sizeof(int));
     baseline_kernel<<<1, 32>>>(d_tok, i, vocab, workload_iters, 0, nullptr, 0);
+    log_cuda_if_error("baseline_kernel");
     cudaMemcpy(&h_tok, d_tok, sizeof(int), cudaMemcpyDeviceToHost);
     cudaFree(d_tok);
     cudaDeviceSynchronize();
@@ -161,6 +172,7 @@ void sd_draft_timed(int draft_n, int i0, int vocab, int work_flops, int mem_iter
     int threads = 128; int blocks = (draft_n + threads - 1) / threads;
     cudaEventRecord(s);
     draft_kernel<<<blocks, threads>>>(g_proposed, draft_n, i0, vocab, work_flops, mem_iters, g_mem, mem_len, seed, noise_ppm);
+    log_cuda_if_error("draft_kernel_timed");
     cudaEventRecord(e); cudaEventSynchronize(e);
     *ms_out = elapsed_ms(s, e);
     cudaEventDestroy(s); cudaEventDestroy(e);
@@ -174,6 +186,7 @@ int sd_verify_timed(int draft_n, int i0, int vocab, int work_flops, int mem_iter
     int *d_acc = nullptr; int h_acc = 0; cudaMalloc(&d_acc, sizeof(int));
     cudaEventRecord(s);
     verify_kernel<<<1, 32>>>(g_proposed, d_acc, draft_n, i0, vocab, work_flops, mem_iters, g_mem, mem_len);
+    log_cuda_if_error("verify_kernel_timed");
     cudaEventRecord(e); cudaEventSynchronize(e);
     *ms_out = elapsed_ms(s, e);
     cudaMemcpy(&h_acc, d_acc, sizeof(int), cudaMemcpyDeviceToHost);
@@ -188,6 +201,7 @@ int sd_baseline_step_timed(int i, int vocab, int work_flops, int mem_iters, int 
     cudaEvent_t s, e; cudaEventCreate(&s); cudaEventCreate(&e);
     cudaEventRecord(s);
     baseline_kernel<<<1, 32>>>(d_tok, i, vocab, work_flops, mem_iters, g_mem, mem_len);
+    log_cuda_if_error("baseline_kernel_timed");
     cudaEventRecord(e); cudaEventSynchronize(e);
     *ms_out = elapsed_ms(s, e);
     cudaMemcpy(&h_tok, d_tok, sizeof(int), cudaMemcpyDeviceToHost);

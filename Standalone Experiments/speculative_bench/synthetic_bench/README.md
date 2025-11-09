@@ -69,6 +69,20 @@ On Linux:
 nvcc -std=c++14 -shared -Xlinker -soname,libspecdecode.so -o libspecdecode.so spec_decode.cu -lcudart
 ```
 
+Need a single command that rebuilds the `.so`, exports `LD_LIBRARY_PATH`, and runs the Go harness? From this folder:
+
+```bash
+bash ./run_cuda_once.sh --total 512 --draftN 4 --workflops 50000 --workmem 8
+```
+
+The script compiles `cuda/libspecdecode.so`, prepends `$(pwd)/cuda` to `LD_LIBRARY_PATH`, and forwards any extra flags to `go run .`.
+
+If you just want a one-liner that builds the `.so`, exports `LD_LIBRARY_PATH`, and runs the Go harness, use:
+
+```bash
+cd Standalone\ Experiments/speculative_bench/synthetic_bench && bash build_cuda_run_go.sh
+```
+
 4) Link a Go harness with cgo to call the timed wrappers
 
 The current `main.go` is a pure-Go synthetic harness. If you want a Go program that calls the CUDA timed wrappers (`sd_draft_timed`, `sd_verify_timed`, `sd_baseline_step_timed`) I can add a cgo-based `main_cuda.go` that:

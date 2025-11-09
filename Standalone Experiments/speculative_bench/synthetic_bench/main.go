@@ -53,10 +53,12 @@ func baseline(totalSteps, vocab, workload int) float64 {
 	return elapsed / float64(totalSteps)
 }
 
-func speculative(totalSteps, draftN, vocab, workloadFlops, workloadMem, memLen, noisePPM int, seed uint32, useMeasuredAcceptance bool) (msPerTok float64, accepted int) {
+func speculative(totalSteps, draftN, vocab, workloadFlops, workloadMem, memLen, noisePPM int, seed uint32, useMeasuredAcceptance bool) (msPerTok float64, accepted int, avgDraftMs float64, avgVerifyMs float64, draftMsPerTok float64, verifyMsPerTok float64) {
 	i := 0
 	start := time.Now()
 	accepted = 0
+	var totalDraftMs, totalVerifyMs float64
+	rounds := 0
 	for i < totalSteps {
 		var draftMs, verifyMs C.float
 		if !useMeasuredAcceptance {
@@ -78,9 +80,21 @@ func speculative(totalSteps, draftN, vocab, workloadFlops, workloadMem, memLen, 
 			accepted += acc
 			_ = draftMs; _ = verifyMs
 		}
+		totalDraftMs += float64(draftMs)
+		totalVerifyMs += float64(verifyMs)
+		rounds++
 	}
 	elapsed := time.Since(start).Seconds() * 1000
-	return elapsed / float64(totalSteps), accepted
+	if rounds > 0 {
+		avgDraftMs = totalDraftMs / float64(rounds)
+		avgVerifyMs = totalVerifyMs / float64(rounds)
+	}
+	if totalSteps > 0 {
+		scale := float64(totalSteps)
+		draftMsPerTok = totalDraftMs / scale
+		verifyMsPerTok = totalVerifyMs / scale
+	}
+	return elapsed / float64(totalSteps), accepted, avgDraftMs, avgVerifyMs, draftMsPerTok, verifyMsPerTok
 }
 
 func main() {
@@ -111,7 +125,9 @@ func main() {
 	fmt.Printf("Baseline:       %.2f ms/token\n", base)
 
 	// Speculative: propose draftN tokens, accept prefix
-	spec, accepted := speculative(total, draftN, vocab, workloadFlops, workloadMem, memLen, noisePPM, seed, useMeasuredAcceptance)
+	spec, accepted, draftAvg, verifyAvg, draftPerTok, verifyPerTok := speculative(total, draftN, vocab, workloadFlops, workloadMem, memLen, noisePPM, seed, useMeasuredAcceptance)
 	fmt.Printf("Speculative:    %.2f ms/token (%.2fx faster)\n", spec, base/spec)
+	fmt.Printf("Kernel avg ms:  draft %.2f (%.2f ms/token) / verify %.2f (%.2f ms/token)\n",
+		draftAvg, draftPerTok, verifyAvg, verifyPerTok)
 	fmt.Printf("Accepted total: %d of %d steps (draftN=%d)\n", accepted, total, draftN)
 }
