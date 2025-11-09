@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import time, json, argparse, requests, statistics, csv
+import time, json, argparse, requests, statistics, csv, math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------- Config ----------
@@ -63,7 +63,8 @@ def latency_bench(port: int, runs: int, prompt: str, max_tokens: int):
     avg_ms = statistics.mean(ms_vals)
     median_ms = statistics.median(ms_vals)
     # p95 manual
-    idx95 = max(0, min(len(ms_vals)-1, int(0.95 * len(ms_vals)) - 1))
+    idx95 = math.ceil(0.95 * len(ms_vals)) - 1
+    idx95 = max(0, min(len(ms_vals) - 1, idx95))
     p95_ms = ms_vals[idx95]
     avg_toks = statistics.mean(tk_vals)
     token_tps = avg_toks / (avg_ms / 1000.0) if avg_ms > 0 else 0.0
@@ -79,9 +80,11 @@ def load_once(port: int, prompt: str, max_tokens: int):
         return 0, float("inf"), 0
 
 def load_test(port: int, jobs: int, prompt: str, max_tokens: int):
+    start = time.perf_counter()
     with ThreadPoolExecutor(max_workers=jobs) as ex:
         futs = [ex.submit(load_once, port, prompt, max_tokens) for _ in range(jobs)]
         results = [f.result() for f in as_completed(futs)]
+    wall_sec = time.perf_counter() - start
     ok = [r for r in results if r[0] == 200 and r[1] != float("inf")]
     fail = len(results) - len(ok)
     if not ok:
@@ -90,10 +93,12 @@ def load_test(port: int, jobs: int, prompt: str, max_tokens: int):
     toks = [r[2] for r in ok]
     avg_ms = statistics.mean(lats)
     median_ms = statistics.median(lats)
-    idx95 = max(0, min(len(lats)-1, int(0.95 * len(lats)) - 1))
+    idx95 = math.ceil(0.95 * len(lats)) - 1
+    idx95 = max(0, min(len(lats) - 1, idx95))
     p95_ms = lats[idx95]
     total_toks = sum(toks)
-    completion_tps = len(lats) / (sum(lats) / 1000.0) if sum(lats) > 0 else 0.0
+    wall_sec = wall_sec if wall_sec > 0 else 1e-9
+    completion_tps = len(lats) / wall_sec
     return {"ok": len(lats), "avg_ms": avg_ms, "median_ms": median_ms, "p95_ms": p95_ms, "total_toks": total_toks, "completion_tps": completion_tps, "fail": fail}
 
 def main():
@@ -223,15 +228,19 @@ def main():
         ms1 = s1.get("avg_ms", float('inf'))
         ct0 = s0.get("completion_tps", 0.0)
         ct1 = s1.get("completion_tps", 0.0)
-        ms_ratio = float('nan')
-        tps_ratio = float('nan')
+        ms_ratio = None
+        tps_ratio = None
         if ms0 != float('inf') and ms1 != float('inf') and ms1 != 0:
             ms_ratio = ms0 / ms1
         if ct0 != 0 and ct1 != 0:
             tps_ratio = ct1 / ct0
         label0 = models[ports.index(p0)] if models else str(p0)
         label1 = models[ports.index(p1)] if models else str(p1)
-        print(f"Pair: {p0}({label0}) -> {p1}({label1}) | base {ms0 if ms0!=float('inf') else 'inf'} ms -> spec {ms1 if ms1!=float('inf') else 'inf'} ms | ms-speedup(base/spec) = {ms_ratio:.2f} | tps(base->spec) {ct0:.2f} -> {ct1:.2f} | tps-speedup = {tps_ratio:.2f}")
+        ms_ratio_str = f"{ms_ratio:.2f}" if ms_ratio is not None else "n/a"
+        tps_ratio_str = f"{tps_ratio:.2f}" if tps_ratio is not None else "n/a"
+        base_ms_str = f"{ms0:.1f}" if ms0 != float('inf') else 'inf'
+        spec_ms_str = f"{ms1:.1f}" if ms1 != float('inf') else 'inf'
+        print(f"Pair: {p0}({label0}) -> {p1}({label1}) | base {base_ms_str} ms -> spec {spec_ms_str} ms | ms-speedup(base/spec) = {ms_ratio_str} | tps(base->spec) {ct0:.2f} -> {ct1:.2f} | tps-speedup = {tps_ratio_str}")
 
     # Optional CSV export
     if args.csv:
