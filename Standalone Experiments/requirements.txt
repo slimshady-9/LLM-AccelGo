@@ -1,0 +1,5 @@
+torch
+transformers
+requests
+flash-attn
+setuptools
