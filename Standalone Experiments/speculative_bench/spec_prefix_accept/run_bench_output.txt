@@ -1,0 +1,25 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading tokenizers and models (this may take a while)...
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 2/2 [00:00<00:00, 43.39it/s]
+/root/LLM-AccelGo/Standalone Experiments/speculative_bench/spec_prefix_accept/run_bench.py:146: FutureWarning: 
+
+The `ci` parameter is deprecated. Use `errorbar='sd'` for the same effect.
+
+  sns.barplot(data=df_m, x='prompt', y='ms_per_tok', hue='mode', ci='sd')
+Warmup for prompt (len 8): 'Explain speculative decoding in simple terms.'...
+Running: prompt='Explain speculative decoding in simple t...', K=4, trial=1/2
+Running: prompt='Explain speculative decoding in simple t...', K=4, trial=2/2
+Running: prompt='Explain speculative decoding in simple t...', K=8, trial=1/2
+Running: prompt='Explain speculative decoding in simple t...', K=8, trial=2/2
+Warmup for prompt (len 13): 'Summarize the main ideas behind attention mechanisms in tran'...
+Running: prompt='Summarize the main ideas behind attentio...', K=4, trial=1/2
+Running: prompt='Summarize the main ideas behind attentio...', K=4, trial=2/2
+Running: prompt='Summarize the main ideas behind attentio...', K=8, trial=1/2
+Running: prompt='Summarize the main ideas behind attentio...', K=8, trial=2/2
+Warmup for prompt (len 14): 'Write a short, friendly introduction to how speculative deco'...
+Running: prompt='Write a short, friendly introduction to ...', K=4, trial=1/2
+Running: prompt='Write a short, friendly introduction to ...', K=4, trial=2/2
+Running: prompt='Write a short, friendly introduction to ...', K=8, trial=1/2
+Running: prompt='Write a short, friendly introduction to ...', K=8, trial=2/2
+Saved plot to /root/LLM-AccelGo/Standalone Experiments/speculative_bench/spec_prefix_accept/bench_plot.png
+Bench complete. Results: /root/LLM-AccelGo/Standalone Experiments/speculative_bench/spec_prefix_accept/bench_results.csv /root/LLM-AccelGo/Standalone Experiments/speculative_bench/spec_prefix_accept/bench_summary.csv

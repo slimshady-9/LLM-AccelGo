@@ -1,7 +1,8 @@
 #include <torch/extension.h>
+#include <cstdint>
 
 // Forward declaration of CUDA launcher
-int launch_prefix_accept(torch::Tensor logits, torch::Tensor proposal);
+int64_t launch_prefix_accept(torch::Tensor logits, torch::Tensor proposal);
 
 // pybind11 module interface (importable as the extension name)
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
@@ -11,6 +12,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 
 // TorchScript operator registration for LibTorch and torch.ops usage
 TORCH_LIBRARY(prefixacc, m) {
+  // Use `int` in the schema string (Py-side), but the C++ kernel must use int64_t
   m.def("accept_len(Tensor logits, Tensor proposal) -> int");
 }
 

@@ -21,20 +21,45 @@ prompts = [
     "Describe how attention works in simple words.",
 ]
 
-def accept_prefix(ctx_ids):
+def accept_prefix(prompt_text):
+    """Generate K tokens with draft model from prompt_text, then verify whether
+    the verify model's greedy argmax matches the proposed text when encoded
+    with the verify tokenizer.
+
+    Returns the number of accepted tokens (0..K).
+    """
+    # Tokenize separately for each model (truncate to MAXLEN for context)
+    d_ctx = draft_tok(prompt_text, return_tensors="pt", truncation=True, max_length=MAXLEN).input_ids.to(DEVICE)
+    v_ctx = verify_tok(prompt_text, return_tensors="pt", truncation=True, max_length=MAXLEN).input_ids.to(DEVICE)
+
+    # DRAFT: generate K tokens (greedy)
     with torch.no_grad():
-        # DRAFT: generate k tokens (greedy)
-        out = draft.generate(ctx_ids, max_new_tokens=K, do_sample=False, pad_token_id=draft_tok.eos_token_id)
-    prop = out[0, -K:]  # proposal tokens
-    # VERIFY: get logits for each proposed position
+        out = draft.generate(d_ctx, max_new_tokens=K, do_sample=False, pad_token_id=draft_tok.eos_token_id)
+    d_prop = out[0, -K:]  # draft proposal tokens (ids in draft vocab)
+
+    # Decode the draft proposal tokens to text, then re-tokenize with verify tokenizer
+    prop_text = draft_tok.decode(d_prop, skip_special_tokens=True)
+    # If decode yields empty text, nothing to verify
+    if len(prop_text.strip()) == 0:
+        return 0
+    v_prop = verify_tok(prop_text, return_tensors="pt").input_ids.to(DEVICE)
+
+    # Only verify up to K tokens to keep histogram buckets consistent
+    v_prop_len = v_prop.shape[1]
+    verify_check_len = min(K, v_prop_len)
+    if verify_check_len == 0:
+        return 0
+
+    # Prepare input for verify model: context + the verify-encoded proposal
     with torch.no_grad():
-        v_in = torch.cat([ctx_ids.to(DEVICE), prop.unsqueeze(0).to(DEVICE)], dim=1)
-        logits = verify(v_in).logits[0, -K:]  # [K, vocab]
-    # compare argmax with proposal
+        v_in = torch.cat([v_ctx, v_prop], dim=1)
+        logits = verify(v_in).logits[0, -v_prop_len:]  # logits for the proposed positions
+
+    # Compare verify model's argmax tokens with the verify-encoded proposal tokens
     acc = 0
-    for j in range(K):
+    for j in range(verify_check_len):
         vtok = int(logits[j].argmax().item())
-        if vtok == int(prop[j].item()):
+        if vtok == int(v_prop[0, j].item()):
             acc += 1
         else:
             break
@@ -43,8 +68,7 @@ def accept_prefix(ctx_ids):
 hist = {str(i): 0 for i in range(K+1)}
 for _ in range(N_SAMPLES):
     prompt = random.choice(prompts)
-    ctx = verify_tok(prompt, return_tensors="pt").input_ids[:, :MAXLEN].to(DEVICE)
-    a = accept_prefix(ctx)
+    a = accept_prefix(prompt)
     hist[str(a)] += 1
 
 with open("accept_hist_k4.json", "w") as f:

@@ -1,0 +1,13 @@
+prompt,K,trial,n_new,baseline_ms_per_tok,speculative_ms_per_tok
+Explain speculative decoding in simple terms.,4,1,64,21.072890609502792,88.373102247715
+Explain speculative decoding in simple terms.,4,2,64,21.01169526576996,88.41435983777046
+Explain speculative decoding in simple terms.,8,1,64,21.01537212729454,155.04274889826775
+Explain speculative decoding in simple terms.,8,2,64,20.985513925552368,154.9924686551094
+Summarize the main ideas behind attention mechanisms in transformers.,4,1,64,21.111853420734406,88.47730234265327
+Summarize the main ideas behind attention mechanisms in transformers.,4,2,64,21.10389620065689,88.2839635014534
+Summarize the main ideas behind attention mechanisms in transformers.,8,1,64,21.04606106877327,154.9849510192871
+Summarize the main ideas behind attention mechanisms in transformers.,8,2,64,21.063145250082016,155.18662333488464
+"Write a short, friendly introduction to how speculative decoding speeds up generation.",4,1,64,21.040968596935272,88.49356323480606
+"Write a short, friendly introduction to how speculative decoding speeds up generation.",4,2,64,21.07306942343712,88.28557282686234
+"Write a short, friendly introduction to how speculative decoding speeds up generation.",8,1,64,21.025605499744415,154.8529453575611
+"Write a short, friendly introduction to how speculative decoding speeds up generation.",8,2,64,21.088283509016037,155.17976507544518

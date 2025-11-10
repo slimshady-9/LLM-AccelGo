@@ -1,0 +1,5 @@
+symlink created -> /root/LLM-AccelGo/Standalone Experiments/speculative_bench/synthetic_bench
+Baseline:       0.01 ms/token
+Speculative:    0.05 ms/token (0.23x faster)
+Kernel avg ms:  draft 0.01 (0.01 ms/token) / verify 0.01 (0.01 ms/token)
+Accepted total: 512 of 512 steps (draftN=4)

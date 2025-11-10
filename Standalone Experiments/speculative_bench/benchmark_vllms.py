@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 import time, json, argparse, requests, statistics, csv, math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -13,14 +14,15 @@ LOAD_MAX_TOKENS = 200
 LOAD_PROMPT = "Write a paragraph about GPUs reading faster with FlashDecoding++."
 # ----------------------------
 
-def one_call(port: int, prompt: str, max_tokens: int):
+def one_call(port: int, prompt: str, max_tokens: int, model: str | None = None):
     url = f"http://localhost:{port}/v1/completions"
+    payload_model = model if model is not None else "any"
     t0 = time.time()
     r = requests.post(
         url,
         headers={"Content-Type": "application/json"},
         data=json.dumps({
-            "model": "any",  # vLLM ignores this field; uses server's model
+            "model": payload_model,
             "prompt": prompt,
             "max_tokens": max_tokens,
             "temperature": 0.0
@@ -36,17 +38,17 @@ def one_call(port: int, prompt: str, max_tokens: int):
     total = usage.get("total_tokens", 0)
     return (t1 - t0) * 1000.0, total, r.status_code  # ms, tokens, status
 
-def latency_bench(port: int, runs: int, prompt: str, max_tokens: int):
+def latency_bench(port: int, runs: int, prompt: str, max_tokens: int, model: str | None = None):
     lats, toks, statuses = [], [], []
     # warmup (not counted)
     try:
-        one_call(port, prompt, max_tokens)
+        one_call(port, prompt, max_tokens, model)
     except Exception:
         pass
 
     for _ in range(runs):
         try:
-            ms, total, status = one_call(port, prompt, max_tokens)
+            ms, total, status = one_call(port, prompt, max_tokens, model)
             lats.append(ms); toks.append(total); statuses.append(status)
         except Exception:
             lats.append(float("inf")); toks.append(0); statuses.append(0)
@@ -72,17 +74,17 @@ def latency_bench(port: int, runs: int, prompt: str, max_tokens: int):
     return {"avg_ms": avg_ms, "median_ms": median_ms, "p95_ms": p95_ms,
             "avg_toks": avg_toks, "token_tps": token_tps, "completion_tps": completion_tps, "failures": failures}
 
-def load_once(port: int, prompt: str, max_tokens: int):
+def load_once(port: int, prompt: str, max_tokens: int, model: str | None = None):
     try:
-        ms, total, status = one_call(port, prompt, max_tokens)
+        ms, total, status = one_call(port, prompt, max_tokens, model)
         return status, ms, total
     except Exception:
         return 0, float("inf"), 0
 
-def load_test(port: int, jobs: int, prompt: str, max_tokens: int):
+def load_test(port: int, jobs: int, prompt: str, max_tokens: int, model: str | None = None):
     start = time.perf_counter()
     with ThreadPoolExecutor(max_workers=jobs) as ex:
-        futs = [ex.submit(load_once, port, prompt, max_tokens) for _ in range(jobs)]
+        futs = [ex.submit(load_once, port, prompt, max_tokens, model) for _ in range(jobs)]
         results = [f.result() for f in as_completed(futs)]
     wall_sec = time.perf_counter() - start
     ok = [r for r in results if r[0] == 200 and r[1] != float("inf")]
@@ -118,18 +120,22 @@ def main():
     args = ap.parse_args()
     ports = args.ports
     models = args.models
-    if models and len(models) != len(ports):
-        print(f"Warning: --models length ({len(models)}) does not match --ports length ({len(ports)}); ignoring models.")
-        models = None
+    if models:
+        if len(models) != len(ports):
+            print(f"Error: --models length ({len(models)}) does not match --ports length ({len(ports)})", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # create a slot per-port so downstream indexing is simple
+        models = [None] * len(ports)
 
     # Group ports into (baseline,spec) pairs for easier running of 2 servers at a time.
     pairs = [ports[i:i+2] for i in range(0, len(ports), 2)]
 
-    def wait_ready(port: int, timeout: int) -> bool:
+    def wait_ready(port: int, timeout: int, model: str | None = None) -> bool:
         # Try common health endpoints, fall back to a small POST probe
         deadline = time.time() + timeout
         urls = [f"http://localhost:{port}/v1/health", f"http://localhost:{port}/health", f"http://localhost:{port}/ready"]
-        probe_payload = json.dumps({"model": "any", "prompt": "ready?", "max_tokens": 1, "temperature": 0.0})
+        probe_payload = json.dumps({"model": (model if model is not None else "any"), "prompt": "ready?", "max_tokens": 1, "temperature": 0.0})
         headers = {"Content-Type": "application/json"}
         while time.time() < deadline:
             for u in urls:
@@ -150,15 +156,15 @@ def main():
         return False
 
     # Wait for ports to be ready (useful when starting servers pairwise)
-    for p in ports:
-        ok = wait_ready(p, args.wait_timeout)
+    for idx, p in enumerate(ports):
+        ok = wait_ready(p, args.wait_timeout, models[idx])
         if not ok:
             print(f"Warning: port {p} did not become ready within {args.wait_timeout}s")
 
     print("\n=== Single-client latency / tokens-per-second ===")
     rows = []
-    for p in args.ports:
-        stats = latency_bench(p, args.runs, args.prompt, args.max_tokens)
+    for idx, p in enumerate(args.ports):
+        stats = latency_bench(p, args.runs, args.prompt, args.max_tokens, models[idx])
         rows.append((p, stats))
 
     print(f"\n| Port | Avg Latency (ms) | Median (ms) | p95 (ms) | Avg Tokens | CompTPS | Failures |")
@@ -186,8 +192,8 @@ def main():
 
     print("\n=== Concurrency load test (continuous batching observable) ===")
     rows2 = []
-    for p in args.ports:
-        stats2 = load_test(p, args.concurrency, args.load_prompt, args.load_max_tokens)
+    for idx, p in enumerate(args.ports):
+        stats2 = load_test(p, args.concurrency, args.load_prompt, args.load_max_tokens, models[idx])
         rows2.append((p, stats2))
 
     print(f"\n| Port | OK Requests | Median (ms) | p95 (ms) | Total Tokens Returned | CompTPS | Failures |")
@@ -234,8 +240,8 @@ def main():
             ms_ratio = ms0 / ms1
         if ct0 != 0 and ct1 != 0:
             tps_ratio = ct1 / ct0
-        label0 = models[ports.index(p0)] if models else str(p0)
-        label1 = models[ports.index(p1)] if models else str(p1)
+        label0 = models[ports.index(p0)] if models and models[ports.index(p0)] else str(p0)
+        label1 = models[ports.index(p1)] if models and models[ports.index(p1)] else str(p1)
         ms_ratio_str = f"{ms_ratio:.2f}" if ms_ratio is not None else "n/a"
         tps_ratio_str = f"{tps_ratio:.2f}" if tps_ratio is not None else "n/a"
         base_ms_str = f"{ms0:.1f}" if ms0 != float('inf') else 'inf'
@@ -249,7 +255,7 @@ def main():
                 w = csv.writer(cf)
                 w.writerow(["port", "label", "avg_ms", "median_ms", "p95_ms", "avg_toks", "token_tps", "completion_tps", "failures"])
                 for p, stats in rows:
-                    label = models[ports.index(p)] if models else ''
+                    label = models[ports.index(p)] if models and models[ports.index(p)] else ''
                     w.writerow([p, label, stats.get('avg_ms'), stats.get('median_ms'), stats.get('p95_ms'), stats.get('avg_toks'), stats.get('token_tps'), stats.get('completion_tps'), stats.get('failures')])
             print(f"Wrote CSV to {args.csv}")
         except Exception as e:

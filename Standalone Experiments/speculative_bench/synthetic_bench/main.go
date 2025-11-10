@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"os"
 	"time"
-	"unsafe"
 )
 
 type Hist struct{ K int `json:"k"`; Hist map[string]int `json:"hist"`; Samples int `json:"samples"` }
